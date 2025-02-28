@@ -73,6 +73,53 @@ func (c *Chip8) StartTimers() {
 	}()
 }
 
+func (c *Chip8) Fetch() uint16 {
+	if int(c.PC)+1 >= len(c.memory) {
+		panic(fmt.Sprintf("PC out of bounds: %04X", c.PC))
+	}
+	opcode := uint16(c.memory[c.PC])<<8 | uint16(c.memory[c.PC+1])
+	c.PC += 2
+	return opcode
+}
+
+func (c *Chip8) Execute(opcode uint16) {
+	switch opcode & 0xF000 {
+	case 0x000:
+		switch opcode {
+		case 0x00E0: // clear
+			for x := range c.display {
+				for y := range c.display[x] {
+					c.display[x][y] = false
+				}
+			}
+		case 0x00EE: // return from subroutine
+			if c.SP == 0 {
+				panic("stack underflow")
+			}
+			c.SP--
+			c.PC = c.stack[c.SP]
+		default:
+			fmt.Printf("Unknown 0x0 opcode: %04X\n", opcode)
+
+		}
+	case 0x1000: // jump
+		c.PC = opcode & 0x0FFF
+	case 0x6000: // set vx
+		x := (opcode & 0x0F00) >> 8
+		c.V[x] = byte(opcode & 0x00FF)
+	case 0x7000: // add to vx
+		x := (opcode & 0x0F00) >> 8
+		c.V[x] += byte(opcode & 0x00FF)
+	default:
+		fmt.Printf("Unkown opcode: %04X\n", opcode)
+	}
+}
+
+func (c *Chip8) Cycle() {
+	opcode := c.Fetch()
+	c.Execute(opcode)
+}
+
 func main() {
 	emulator := Chip8{}
 	emulator.Init()
@@ -86,9 +133,11 @@ func main() {
 		return
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 1000; i++ {
+		emulator.Cycle()
 		time.Sleep(500 * time.Millisecond)
 		fmt.Printf("DT: %d, ST: %d\n", emulator.DT, emulator.ST)
+		fmt.Printf("Cycle %d: PC=%04X, V0=%02X\n", i, emulator.PC, emulator.V[0])
 	}
 
 }
