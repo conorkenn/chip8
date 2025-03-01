@@ -101,20 +101,96 @@ func (c *Chip8) Execute(opcode uint16) {
 			fmt.Printf("Unknown 0x0 opcode: %04X\n", opcode)
 
 		}
-	case 0x1000: // jump
+	case 0x1000: // 1NNN jump
 		c.PC = opcode & 0x0FFF
-	case 0x6000: // set vx
+	case 0x2000: // 2NNN call subroutine
+		if int(c.SP)+1 >= len(c.stack) {
+			panic("stack overflow")
+		}
+		c.stack[c.SP] = c.PC
+		c.SP++
+		c.PC = opcode & 0x0FFF
+	case 0x3000: // 3XNN skip if vx == nn
+		x := (opcode & 0x0F00) >> 8
+		nn := byte(opcode & 0x00FF)
+		if c.V[x] == nn {
+			c.PC += 2
+		}
+	case 0x4000: // 4XNN skip if vx != nn
+		x := (opcode & 0x0F00) >> 8
+		nn := byte(opcode & 0x00FF)
+		if c.V[x] != nn {
+			c.PC += 2
+		}
+	case 0x5000: // 5XY0 skip if VX != VY
+		x := (opcode & 0x0F00) >> 8
+		y := (opcode & 0x00FF) >> 4
+		if c.V[x] == c.V[y] {
+			c.PC += 2
+		}
+	case 0x6000: // 6XNN set vx
 		x := (opcode & 0x0F00) >> 8
 		c.V[x] = byte(opcode & 0x00FF)
-	case 0x7000: // add to vx
+	case 0x7000: // 7XNN add to vx
 		x := (opcode & 0x0F00) >> 8
 		c.V[x] += byte(opcode & 0x00FF)
+	case 0x8000:
+		x := (opcode & 0x0F00) >> 8
+		y := (opcode & 0x00F0) >> 4
+		switch opcode & 0x000F {
+		case 0x0: // 8XY0 vx = vy
+			c.V[x] = c.V[y]
+		case 0x1: // 8XY1 vx or vy
+			c.V[x] |= c.V[y]
+		case 0x2: // 8XY2 vx and vy
+			c.V[x] &= c.V[y]
+		case 0x3: // 8XY3 vx xor vy
+			c.V[x] ^= c.V[y]
+		case 0x4: // 8XY4 vx += vy
+			sum := uint16(c.V[x]) + uint16(c.V[y])
+			c.V[x] = byte(sum & 0xFF)
+			c.V[0xF] = byte((sum >> 8) & 0x01)
+		case 0x5: // 8XY5 vx -= vy
+			diff := uint16(c.V[x]) - uint16(c.V[y])
+			c.V[x] = byte(diff & 0xFF)
+			c.V[0xF] = byte(0)
+			if c.V[x] > c.V[y] {
+				c.V[0xF] = 1
+			}
+		case 0x6: //8XY6 vx >>-1 vf lsb
+			c.V[0xF] = c.V[x] & 0x01
+			c.V[x] >>= 1
+		case 0x7: // 8XY7 vx = vy - vx
+			diff := uint16(c.V[y]) - uint16(c.V[x])
+			c.V[x] = byte(diff & 0xFF)
+			c.V[0xF] = byte(0) // No borrow if VY >= VX
+			if c.V[y] > c.V[x] {
+				c.V[0xF] = 1 // No borrow
+			}
+		case 0xE: // 8XYE vx <<=1 vf msb
+			c.V[0xF] = (c.V[x] & 0x80) >> 7
+			c.V[x] <<= 1
+		}
+	case 0x9000: // 9XY0 skip if VX != VY
+		x := (opcode & 0x0F00) >> 8
+		y := (opcode & 0x00F0) >> 4
+		if c.V[x] != c.V[y] {
+			c.PC += 2
+		}
+	case 0xA000: // ANNN: Set I = NNN
+		c.I = opcode & 0x0FFF
+	case 0xB000: // BNNN: Jump to NNN + V0
+		c.PC = (opcode & 0x0FFF) + uint16(c.V[0])
+	case 0xC000: // CXNN: VX = random & NN
+		x := (opcode & 0x0F00) >> 8
+		nn := byte(opcode & 0x00FF)
+		randByte := byte(time.Now().Nanosecond() % 256)
+		c.V[x] = randByte & nn
 	case 0xD000: //dxyn
 		x := c.V[(opcode&0x0F00)>>8]
 		y := c.V[(opcode&0x00F0)>>4]
 		height := opcode & 0x000F
 		c.V[0xF] = 0
-
 		for row := uint16(0); row < height; row++ {
 			spriteByte := c.memory[c.I+row]
 			for col := uint8(0); col < 8; col++ {
@@ -129,6 +205,25 @@ func (c *Chip8) Execute(opcode uint16) {
 				}
 			}
 		}
+	case 0xF000:
+		x := (opcode & 0x0F00) >> 8
+		switch opcode & 0x00FF {
+		case 0x07: // FX07: VX = DT
+			c.V[x] = c.DT
+		case 0x15: // FX15: DT = VX
+			c.DT = c.V[x]
+		case 0x18: // FX18: ST = VX
+			c.ST = c.V[x]
+		case 0x1E: // FX1E: I += VX
+			i := uint16(c.V[x])
+			if c.I+uint16(c.V[x]) > 0xFFF { // Optional: Set VF for overflow
+				c.V[0xF] = 1
+			} else {
+				c.V[0xF] = 0
+			}
+			c.I += i
+		}
+
 	default:
 		fmt.Printf("Unkown opcode: %04X\n", opcode)
 	}
