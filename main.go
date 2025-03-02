@@ -16,6 +16,7 @@ type Chip8 struct {
 	V       [16]byte     // 8 bit general registers
 	DT      byte         // delay timer
 	ST      byte         // sound timer
+	keys    [16]bool
 }
 
 var fontset = [80]byte{
@@ -222,6 +223,31 @@ func (c *Chip8) Execute(opcode uint16) {
 				c.V[0xF] = 0
 			}
 			c.I += i
+		case 0x0A: // FX0A wait for key press
+			for i := 0; i < 16; i++ {
+				if c.keys[i] {
+					c.V[x] = byte(i)
+					return
+				}
+			}
+			c.PC -= 2
+			return
+
+		case 0x29: // FX29 set sprite address for digit
+			c.I = uint16(c.V[x]&0x0F) * 5
+		case 0x33: // FX33 store bcd of vx
+			value := c.V[x]
+			c.memory[c.I] = value / 100
+			c.memory[c.I] = (value / 10) % 10
+			c.memory[c.I] = value % 10
+		case 0x55:
+			for i := uint16(0); i <= x; i++ {
+				c.memory[c.I+i] = c.V[i]
+			}
+		case 0x65:
+			for i := uint16(0); i <= x; i++ {
+				c.V[i] = c.memory[c.I+i]
+			}
 		}
 
 	default:
@@ -248,6 +274,16 @@ func (c *Chip8) PrintDisplay() {
 	fmt.Println("---")
 }
 
+func (c *Chip8) updateKeys() {
+	var input byte
+	fmt.Scanf("%c", &input)
+	if input >= '0' && input <= '9' {
+		c.keys[input-'0'] = true
+	} else if input >= 'A' && input <= 'F' {
+		c.keys[input-'A'+10] = true
+	}
+}
+
 func main() {
 	emulator := Chip8{}
 	emulator.Init()
@@ -261,7 +297,8 @@ func main() {
 		return
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
+		//emulator.updateKeys()
 		emulator.Cycle()
 		time.Sleep(2 * time.Millisecond) // ~500 Hz
 		if i%100 == 0 {
