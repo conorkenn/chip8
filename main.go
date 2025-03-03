@@ -61,13 +61,21 @@ func (c *Chip8) StartTimers() {
 	go func() {
 		ticker := time.NewTicker(time.Second / 60)
 		defer ticker.Stop()
+		wasPlaying := false
+
 		for range ticker.C {
 			if c.DT > 0 {
 				c.DT--
 			}
 			if c.ST > 0 {
 				c.ST--
-				// beep
+				if !wasPlaying {
+					PlayBeep()
+					wasPlaying = true
+				}
+			} else if wasPlaying {
+				StopBeep()
+				wasPlaying = false
 			}
 		}
 	}()
@@ -287,10 +295,11 @@ func (c *Chip8) updateKeys() {
 func main() {
 	emulator := Chip8{}
 	emulator.Init()
+	InitSound() // Initialize sound system
 	emulator.StartTimers()
 
 	emulator.DT = 60
-	emulator.ST = 30
+	emulator.ST = 30 // Test the beep
 
 	if err := emulator.LoadROM("assets/roms/ibm.ch8"); err != nil {
 		fmt.Println("Error loading ROM: ", err)
@@ -298,7 +307,6 @@ func main() {
 	}
 
 	for i := range 1000 {
-		//emulator.updateKeys()
 		emulator.Cycle()
 		time.Sleep(2 * time.Millisecond) // ~500 Hz
 		if i%100 == 0 {
@@ -306,5 +314,4 @@ func main() {
 			emulator.PrintDisplay()
 		}
 	}
-
 }
