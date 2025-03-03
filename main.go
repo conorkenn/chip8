@@ -82,13 +82,13 @@ func (c *Chip8) StartTimers() {
 	}()
 }
 
-func (c *Chip8) Fetch() uint16 {
+func (c *Chip8) Fetch() (uint16, error) {
 	if int(c.PC)+1 >= len(c.memory) {
-		panic(fmt.Sprintf("PC out of bounds: %04X", c.PC))
+		return 0, fmt.Errorf("PC out of bounds: %04X", c.PC)
 	}
 	opcode := uint16(c.memory[c.PC])<<8 | uint16(c.memory[c.PC+1])
 	c.PC += 2
-	return opcode
+	return opcode, nil
 }
 
 func (c *Chip8) Execute(opcode uint16) {
@@ -103,7 +103,7 @@ func (c *Chip8) Execute(opcode uint16) {
 			}
 		case 0x00EE: // return from subroutine
 			if c.SP == 0 {
-				panic("stack underflow")
+				fmt.Println("stack underflow")
 			}
 			c.SP--
 			c.PC = c.stack[c.SP]
@@ -115,7 +115,7 @@ func (c *Chip8) Execute(opcode uint16) {
 		c.PC = opcode & 0x0FFF
 	case 0x2000: // 2NNN call subroutine
 		if int(c.SP)+1 >= len(c.stack) {
-			panic("stack overflow")
+			fmt.Println("stack overflow")
 		}
 		c.stack[c.SP] = c.PC
 		c.SP++
@@ -202,6 +202,10 @@ func (c *Chip8) Execute(opcode uint16) {
 		height := opcode & 0x000F
 		c.V[0xF] = 0
 		for row := uint16(0); row < height; row++ {
+			if c.I+row >= 4096 {
+				fmt.Printf("Sprite Draw out of bounds at I=%04X\n", c.I+row)
+				return
+			}
 			spriteByte := c.memory[c.I+row]
 			for col := uint8(0); col < 8; col++ {
 				if (spriteByte & (0x80 >> col)) != 0 {
@@ -245,15 +249,27 @@ func (c *Chip8) Execute(opcode uint16) {
 		case 0x29: // FX29 set sprite address for digit
 			c.I = uint16(c.V[x]&0x0F) * 5
 		case 0x33: // FX33 store bcd of vx
+			if c.I+2 >= 4096 {
+				fmt.Printf("BCD write out of bounds at I=%04X\n", c.I)
+				return
+			}
 			value := c.V[x]
 			c.memory[c.I] = value / 100
 			c.memory[c.I+1] = (value / 10) % 10
 			c.memory[c.I+2] = value % 10
 		case 0x55:
+			if c.I+x >= 4096 {
+				fmt.Printf("Register dump out of bounds at I=%04X\n", c.I)
+				return
+			}
 			for i := uint16(0); i <= x; i++ {
 				c.memory[c.I+i] = c.V[i]
 			}
 		case 0x65:
+			if c.I+x >= 4096 {
+				fmt.Printf("Register load out of bounds at I=%04X\n", c.I)
+				return
+			}
 			for i := uint16(0); i <= x; i++ {
 				c.V[i] = c.memory[c.I+i]
 			}
@@ -264,9 +280,13 @@ func (c *Chip8) Execute(opcode uint16) {
 	}
 }
 
-func (c *Chip8) Cycle() {
-	opcode := c.Fetch()
+func (c *Chip8) Cycle() error {
+	opcode, err := c.Fetch()
+	if err != nil {
+		return err
+	}
 	c.Execute(opcode)
+	return nil
 }
 
 func (c *Chip8) PrintDisplay() {
