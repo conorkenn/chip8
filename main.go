@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 )
@@ -193,7 +194,7 @@ func (c *Chip8) Execute(opcode uint16) {
 	case 0xC000: // CXNN: VX = random & NN
 		x := (opcode & 0x0F00) >> 8
 		nn := byte(opcode & 0x00FF)
-		randByte := byte(time.Now().Nanosecond() % 256)
+		randByte := byte(rand.Intn(256))
 		c.V[x] = randByte & nn
 	case 0xD000: //dxyn
 		x := c.V[(opcode&0x0F00)>>8]
@@ -295,11 +296,11 @@ func (c *Chip8) updateKeys() {
 func main() {
 	emulator := Chip8{}
 	emulator.Init()
-	InitSound() // Initialize sound system
+	InitSound()
 	emulator.StartTimers()
 
 	emulator.DT = 60
-	emulator.ST = 30 // Test the beep
+	emulator.ST = 30
 
 	if err := emulator.LoadROM("assets/roms/ibm.ch8"); err != nil {
 		fmt.Println("Error loading ROM: ", err)
@@ -308,7 +309,7 @@ func main() {
 
 	for i := range 1000 {
 		emulator.Cycle()
-		time.Sleep(2 * time.Millisecond) // ~500 Hz
+		time.Sleep(2 * time.Millisecond)
 		if i%100 == 0 {
 			fmt.Printf("Cycle %d: PC=%04X, V0=%02X\n", i, emulator.PC, emulator.V[0])
 			emulator.PrintDisplay()
