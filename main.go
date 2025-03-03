@@ -238,8 +238,8 @@ func (c *Chip8) Execute(opcode uint16) {
 		case 0x33: // FX33 store bcd of vx
 			value := c.V[x]
 			c.memory[c.I] = value / 100
-			c.memory[c.I] = (value / 10) % 10
-			c.memory[c.I] = value % 10
+			c.memory[c.I+1] = (value / 10) % 10
+			c.memory[c.I+2] = value % 10
 		case 0x55:
 			for i := uint16(0); i <= x; i++ {
 				c.memory[c.I+i] = c.V[i]
